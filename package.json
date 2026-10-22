@@ -1,0 +1,1 @@
+{"dependencies":{"ethers":"^6.13.4","react":"^18.3.1","react-dom":"^18.3.1"},"description":"Turno — savings circles where the contract holds the pot. Everyone gets their turn.","devDependencies":{"@vitejs/plugin-react":"^4.3.3","vite":"^5.4.10"},"name":"turno","private":true,"scripts":{"build":"vite build","dev":"vite","preview":"vite preview"},"type":"module","version":"0.1.0"}
