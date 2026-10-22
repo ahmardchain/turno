@@ -162,6 +162,12 @@ of circles. Full reference: [docs/CONTRACT.md](docs/CONTRACT.md).
 ## The app
 
 A Vite + React app in [`src/`](src/), talking to the contract with ethers v6.
+The UI is built on **Tailwind CSS v4** with **shadcn/ui-style components**
+([`src/components/ui`](src/components/ui) — Button, Card, Badge, Input,
+Textarea, Alert — owned in-repo, not a dependency) themed to the ink/lime
+brand, plus Magic UI-style components in
+[`src/components/magic`](src/components/magic) (Marquee, DotPattern,
+BorderBeam, BlurFade) and an Aceternity-style bento grid.
 Plain language throughout — *circle, turn, pot, pay in, collect* — and every
 transaction state is visible; there are no silent buttons. Network parameters,
 ABIs and wallet network-switching live in [`src/turno.js`](src/turno.js).
@@ -171,10 +177,13 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ```
 turno/
-├── src/                  # Web app (Vite + React + ethers)
+├── src/                  # Web app (Vite + React + Tailwind v4 + ethers)
 │   ├── App.jsx           # Landing + preview simulator + live on-chain app
+│   ├── components/ui/    # shadcn/ui-style components (owned, themed)
+│   ├── components/magic/ # Magic UI-style Marquee / DotPattern / BorderBeam / BlurFade
+│   ├── lib/utils.js      # cn() helper (clsx + tailwind-merge)
 │   ├── turno.js          # Arc network config, ABIs, wallet helpers
-│   └── styles.css        # Brand styling (ink / lime / paper)
+│   └── styles.css        # Tailwind v4 theme tokens (ink / lime / paper) + keyframes
 ├── contracts/
 │   ├── Turno.sol         # Reference contract (Solidity ^0.8.24)
 │   └── local-test.mjs    # Compile + full-cycle logic test (solc + ganache)
