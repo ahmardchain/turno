@@ -36,18 +36,22 @@ export const LIVE = CONTRACT_ADDRESS.length > 0;
 
 // ---- ABIs (human-readable, ethers v6) -------------------------------------
 export const TURNO_ABI = [
-  "function createCircle(address[] members, uint256 contribution) returns (uint256 circleId)",
+  "function createCircle(address[] members, uint256 contribution, uint256 roundDuration) returns (uint256 circleId)",
   "function contribute(uint256 circleId)",
+  "function refund(uint256 circleId)",
   "function circleCount() view returns (uint256)",
-  "function getCircle(uint256 circleId) view returns (address creator, uint256 contribution, uint256 round, uint256 paidCount, uint256 memberCount, bool completed)",
+  "function getCircle(uint256 circleId) view returns (address creator, uint256 contribution, uint256 round, uint256 paidCount, uint256 memberCount, bool completed, bool cancelled, uint256 roundEnd)",
   "function getMembers(uint256 circleId) view returns (address[])",
   "function hasPaid(uint256 circleId, address member) view returns (bool)",
+  "function canRefund(uint256 circleId, address member) view returns (bool)",
   "function currentRecipient(uint256 circleId) view returns (address)",
   "function potSize(uint256 circleId) view returns (uint256)",
-  "event CircleCreated(uint256 indexed circleId, address indexed creator, uint256 contribution, uint256 memberCount)",
+  "event CircleCreated(uint256 indexed circleId, address indexed creator, uint256 contribution, uint256 memberCount, uint256 roundDuration)",
   "event Contribution(uint256 indexed circleId, uint256 indexed round, address indexed member, uint256 amount)",
   "event Payout(uint256 indexed circleId, uint256 indexed round, address indexed recipient, uint256 amount)",
   "event CircleCompleted(uint256 indexed circleId)",
+  "event CircleCancelled(uint256 indexed circleId, uint256 indexed round)",
+  "event Refund(uint256 indexed circleId, uint256 indexed round, address indexed member, uint256 amount)",
 ];
 
 export const USDC_ABI = [
@@ -71,6 +75,28 @@ export function parseUSDC(text) {
 export function shortAddr(a) {
   if (!a) return "—";
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
+}
+
+// Round length limits enforced by the contract (1 hour to 90 days).
+export const MIN_ROUND_HOURS = 1;
+export const MAX_ROUND_HOURS = 24 * 90;
+
+// Gas limit for a write call: the node's estimate plus a 30% buffer, falling
+// back to a fixed limit when estimation fails. The final contribution of a
+// round also pays the pot out, so it is the most expensive call and the one an
+// under-priced estimate would break.
+const FALLBACK_GAS = 600000n;
+export async function gasOverrides(contractMethod, ...args) {
+  try {
+    const estimate = await contractMethod.estimateGas(...args);
+    return { gasLimit: (estimate * 130n) / 100n };
+  } catch {
+    return { gasLimit: FALLBACK_GAS };
+  }
+}
+
+export function fmtDeadline(unixSeconds) {
+  return new Date(Number(unixSeconds) * 1000).toLocaleString();
 }
 
 export function readProvider() {

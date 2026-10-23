@@ -30,6 +30,8 @@ The project is a Vite app; Vercel's Vite preset works with zero configuration
   address is set).
 - Click through a full preview circle: 3 pay-ins → automatic pot message →
   rounds 2 and 3 → "Circle complete".
+- In live mode, a circle created with a short round length shows its round
+  deadline; after the deadline, members who paid see the refund button.
 - Footer links resolve (GitHub, DoraHacks, Arc docs, explorer).
 
 ## 2. Contract on Arc (via Arc Studio)
@@ -37,7 +39,8 @@ The project is a Vite app; Vercel's Vite preset works with zero configuration
 Follow [`studio/STUDIO_PROMPTS.md`](../studio/STUDIO_PROMPTS.md) in order.
 The gates that matter:
 
-1. **Studio tests pass** — the same five cases the local harness asserts.
+1. **Studio tests pass** — the same seven cases the local harness asserts
+   (`npm run test:contract` runs the reference harness).
 2. **Testnet rehearsal** — deploy to Arc testnet, create a 3-wallet circle,
    play one full round, confirm the payout transaction on the testnet
    explorer. **Do not proceed to mainnet unless this works.**

@@ -14,8 +14,8 @@ Checked 2026-10-22 before adopting: no savings-circle, escrow or payments produc
 named Turno. The crowded names in this space — Ajo, Alajo, Kolo, Susu, Osusu, Solva,
 Truzo — were all rejected for direct collisions.
 
-## The wedge (why Turno is not the existing ajo apps)
-Every existing ajo/esusu app found is either a ledger or a custodian:
+## The wedge (why Turno is not the existing savings-circle apps)
+Every existing savings-circle app found is either a ledger or a custodian:
 - Turnwyse: "tracking only — no wallet, no escrow, nothing for anyone to abscond with"
   (their words) — the money still moves hand-to-hand off-app.
 - AjoMoney / AjoLedger / Osusu MoneyFlow: contribution tracking, reminders, reports.
@@ -24,7 +24,8 @@ Every existing ajo/esusu app found is either a ledger or a custodian:
 Turno is none of those. The **smart contract** holds the USDC on Arc. Not the
 organiser, not Turno, not a company. The payout fires automatically inside the same
 transaction as the final contribution for a round. There is no account to abscond
-with, no admin who can delay a payout, and no custodian to trust or license.
+with, no admin who can delay a payout, and no custodian to trust or license. If a
+round stalls, members who paid take their own contribution back — nobody else's.
 
 ## Voice
 Plain, warm, zero crypto jargon in user-facing copy. Words we use: circle, turn,

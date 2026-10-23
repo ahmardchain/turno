@@ -9,6 +9,8 @@ import {
   Globe,
   Link2,
   PiggyBank,
+  Send,
+  Share2,
   RefreshCw,
   ShieldCheck,
   Timer,
@@ -30,11 +32,15 @@ import { cn } from "@/lib/utils";
 import {
   CONTRACT_ADDRESS,
   LIVE,
+  MAX_ROUND_HOURS,
+  MIN_ROUND_HOURS,
   NETWORK,
   TURNO_ABI,
   USDC_ABI,
   USDC_ADDRESS,
+  fmtDeadline,
   fmtUSDC,
+  gasOverrides,
   parseUSDC,
   readContract,
   shortAddr,
@@ -75,7 +81,7 @@ function Logo() {
 
 /* ---------------- Landing ---------------- */
 
-const TRADITIONS = ["AJO", "ESUSU", "SUSU", "TONTINE", "HUI", "CHAMA", "KYE", "ADASHE", "PALUWAGAN", "EKUB", "PARTNER", "STOKVEL"];
+const TRADITIONS = ["SUSU", "TONTINE", "HUI", "CHAMA", "KYE", "ADASHE", "PALUWAGAN", "EKUB", "PARTNER", "STOKVEL"];
 
 function Hero() {
   return (
@@ -94,7 +100,7 @@ function Hero() {
           their <span className="text-lime">turn.</span>
         </h1>
         <p className="mb-8 max-w-[560px] text-lg leading-relaxed text-paper/75">
-          Turno is an ajo / esusu savings circle where the <strong className="text-paper">smart contract holds the pot</strong> —
+          Turno is a savings circle where the <strong className="text-paper">smart contract holds the pot</strong> —
           not the organiser. Everyone pays in each round. The moment the last contribution lands, the full pot pays that
           round's member automatically, in the same transaction.
         </p>
@@ -223,7 +229,8 @@ function WhyTurno() {
                   <ul className="space-y-2 text-[15px] leading-relaxed text-paper/90">
                     <li>The contract custodies the pot for the round</li>
                     <li>Payout is code — it fires in the final contribution tx</li>
-                    <li>No owner, no admin, no withdrawal function at all</li>
+                    <li>No owner, no admin, no way to touch anyone else's money</li>
+                    <li>If a round stalls, members who paid can take their own contribution back</li>
                   </ul>
                 </div>
               </div>
@@ -238,8 +245,9 @@ function WhyTurno() {
             </CardHeader>
             <CardContent>
               <p className="leading-relaxed text-muted">
-                No admin key exists, so no admin key can be stolen, abused or pressured. The code only knows one way
-                money leaves: to the member whose turn it is.
+                No admin key exists, so no admin key can be stolen, abused or pressured. The code only knows two ways
+                money leaves: the payout to the member whose turn it is, or a refund of your own contribution when a
+                round stalls past its deadline.
               </p>
             </CardContent>
           </Card>
@@ -280,7 +288,7 @@ function WhyTurno() {
 function Status() {
   const rows = [
     ["Brand, product spec and reference contract", true],
-    ["Contract logic-tested locally (full 3-member cycle, payouts, reverts)", true],
+    ["Contract logic-tested locally (full 3-member cycle, payouts, stalled-round refunds, reverts)", true],
     ["This app, documentation and public repo", true],
     ["Hosted on Vercel, linked to GitHub", true],
     ["Contract + app built in Arc Studio, testnet rehearsal", false],
@@ -407,6 +415,40 @@ function PreviewApp() {
   );
 }
 
+/* ---------------- Invite links ---------------- */
+
+function circleIdFromUrl() {
+  const raw = new URLSearchParams(window.location.search).get("circle");
+  if (raw === null || !/^\d+$/.test(raw)) return null;
+  return Number(raw);
+}
+
+function setCircleIdInUrl(id) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("circle", String(id));
+  url.hash = "app";
+  window.history.replaceState(null, "", url);
+}
+
+function inviteLink(id) {
+  const url = new URL(window.location.origin + window.location.pathname);
+  url.searchParams.set("circle", String(id));
+  url.hash = "app";
+  return url.toString();
+}
+
+function inviteText(id, contribution) {
+  return `Join my Turno savings circle — ${fmtUSDC(contribution)} USDC per round, and the contract holds the pot, not me. Open the link, connect your wallet and pay in:`;
+}
+
+function whatsappShare(id, contribution) {
+  return `https://wa.me/?text=${encodeURIComponent(`${inviteText(id, contribution)} ${inviteLink(id)}`)}`;
+}
+
+function telegramShare(id, contribution) {
+  return `https://t.me/share/url?url=${encodeURIComponent(inviteLink(id))}&text=${encodeURIComponent(inviteText(id, contribution))}`;
+}
+
 /* ---------------- Live on-chain app ---------------- */
 
 function LiveApp() {
@@ -416,7 +458,10 @@ function LiveApp() {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [contribution, setContribution] = useState("2");
+  const [roundHours, setRoundHours] = useState("168");
   const [membersText, setMembersText] = useState("");
+  const [lastTx, setLastTx] = useState(null);
+  const [copied, setCopied] = useState(false);
   const busyRef = useRef(false);
 
   const loadCircles = useCallback(async () => {
@@ -431,6 +476,7 @@ function LiveApp() {
         round: Number(g.round),
         memberCount: Number(g.memberCount),
         completed: g.completed,
+        cancelled: g.cancelled,
       });
     }
     setCircles(rows.reverse());
@@ -439,6 +485,16 @@ function LiveApp() {
   useEffect(() => {
     loadCircles().catch(() => setMsg("Could not reach the Arc RPC yet — try refresh."));
   }, [loadCircles]);
+
+  // Invite links: /?circle=7#app opens circle 7 directly.
+  useEffect(() => {
+    const id = circleIdFromUrl();
+    if (id !== null) {
+      openCircle(id);
+      document.getElementById("app")?.scrollIntoView({ behavior: "smooth" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function connect() {
     try {
@@ -461,7 +517,7 @@ function LiveApp() {
       if (!g.completed) {
         for (const m of members) paidMap[m] = await c.hasPaid(id, m);
       }
-      const recipient = g.completed ? null : await c.currentRecipient(id);
+      const recipient = g.completed || g.cancelled ? null : await c.currentRecipient(id);
       const pot = await c.potSize(id);
       setDetail({
         id,
@@ -471,11 +527,15 @@ function LiveApp() {
         paidCount: Number(g.paidCount),
         memberCount: Number(g.memberCount),
         completed: g.completed,
+        cancelled: g.cancelled,
+        roundEnd: Number(g.roundEnd),
         members,
         paidMap,
         recipient,
         pot,
       });
+      setCircleIdInUrl(id);
+      setCopied(false);
     } catch (e) {
       setMsg(e.shortMessage || e.message);
     } finally {
@@ -483,11 +543,44 @@ function LiveApp() {
     }
   }
 
+  async function copyInvite() {
+    try {
+      await navigator.clipboard.writeText(inviteLink(detail.id));
+      setCopied(true);
+    } catch {
+      setMsg(`Copy this invite link: ${inviteLink(detail.id)}`);
+    }
+  }
+
   async function createCircle() {
     if (busyRef.current) return;
     const members = membersText.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean);
+    if (members.length < 2 || members.length > 10) {
+      setMsg("A circle needs 2 to 10 members.");
+      return;
+    }
     if (members.some((m) => !ethers.isAddress(m))) {
       setMsg("Every member must be a valid wallet address, one per line.");
+      return;
+    }
+    if (new Set(members.map((m) => m.toLowerCase())).size !== members.length) {
+      setMsg("Each member can only appear once.");
+      return;
+    }
+    const hours = Number(roundHours);
+    if (!Number.isInteger(hours) || hours < MIN_ROUND_HOURS || hours > MAX_ROUND_HOURS) {
+      setMsg(`Round length must be a whole number of hours between ${MIN_ROUND_HOURS} and ${MAX_ROUND_HOURS}.`);
+      return;
+    }
+    let amount;
+    try {
+      amount = parseUSDC(contribution);
+    } catch {
+      setMsg("Enter the contribution as a number, for example 2 or 5.5.");
+      return;
+    }
+    if (amount <= 0n) {
+      setMsg("The contribution must be more than zero.");
       return;
     }
     busyRef.current = true;
@@ -496,11 +589,23 @@ function LiveApp() {
       const provider = await walletProvider();
       const signer = await provider.getSigner();
       const c = new ethers.Contract(CONTRACT_ADDRESS, TURNO_ABI, signer);
+      setLastTx(null);
       setMsg("Creating the circle — confirm in your wallet…");
-      const tx = await c.createCircle(members, parseUSDC(contribution));
-      await tx.wait();
-      setMsg("Circle created.");
+      const tx = await c.createCircle(members, amount, hours * 3600);
+      const receipt = await tx.wait();
+      const created = receipt.logs
+        .map((l) => {
+          try {
+            return c.interface.parseLog(l);
+          } catch {
+            return null;
+          }
+        })
+        .find((ev) => ev?.name === "CircleCreated");
+      setLastTx(receipt.hash);
+      setMsg("Circle created. Share the invite link with your members so they can pay in.");
       await loadCircles();
+      if (created) await openCircle(Number(created.args.circleId));
     } catch (e) {
       setMsg(e.shortMessage || e.message);
     } finally {
@@ -524,13 +629,15 @@ function LiveApp() {
         const txA = await usdc.approve(CONTRACT_ADDRESS, detail.contribution);
         await txA.wait();
       }
+      setLastTx(null);
       setMsg("Step 2 of 2: paying in your contribution…");
       const c = new ethers.Contract(CONTRACT_ADDRESS, TURNO_ABI, signer);
-      const tx = await c.contribute(detail.id);
+      const tx = await c.contribute(detail.id, await gasOverrides(c.contribute, detail.id));
       const receipt = await tx.wait();
+      setLastTx(receipt.hash);
       setMsg(
         detail.paidCount + 1 === detail.memberCount
-          ? `Paid in — and that completed the round, so the pot was paid out in the same transaction (${receipt.hash.slice(0, 10)}…).`
+          ? "Paid in — and that completed the round, so the pot was paid out in the same transaction."
           : "Paid in. The pot pays out when everyone has contributed."
       );
       await openCircle(detail.id);
@@ -543,7 +650,34 @@ function LiveApp() {
     }
   }
 
+  async function refund() {
+    if (!detail || busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      const provider = await walletProvider();
+      const signer = await provider.getSigner();
+      const c = new ethers.Contract(CONTRACT_ADDRESS, TURNO_ABI, signer);
+      setLastTx(null);
+      setMsg("Taking your contribution back — confirm in your wallet…");
+      const tx = await c.refund(detail.id, await gasOverrides(c.refund, detail.id));
+      const receipt = await tx.wait();
+      setLastTx(receipt.hash);
+      setMsg("Refunded. Your contribution to the stalled round is back in your wallet, and the circle is now closed.");
+      await openCircle(detail.id);
+      await loadCircles();
+    } catch (e) {
+      setMsg(e.shortMessage || e.message);
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }
+
   const myTurnPaid = detail && account ? detail.paidMap[account] : undefined;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const roundOverdue = detail && !detail.completed && nowSec > detail.roundEnd;
+  const canRefundNow = Boolean(detail && account && !detail.completed && myTurnPaid && (detail.cancelled || roundOverdue));
 
   return (
     <div>
@@ -571,6 +705,13 @@ function LiveApp() {
             <Input className="mt-1.5 font-normal" value={contribution} onChange={(e) => setContribution(e.target.value)} inputMode="decimal" />
           </label>
           <label className="mb-4 block text-sm font-bold">
+            Hours per round (1 to {MAX_ROUND_HOURS})
+            <Input className="mt-1.5 font-normal" value={roundHours} onChange={(e) => setRoundHours(e.target.value)} inputMode="numeric" />
+            <span className="mt-1.5 block text-[13px] font-normal text-muted">
+              If a round is still unfinished after this long, members who already paid can take their contribution back.
+            </span>
+          </label>
+          <label className="mb-4 block text-sm font-bold">
             Member addresses, in payout order (one per line, 2–10)
             <Textarea className="mt-1.5 font-normal" rows={5} value={membersText} onChange={(e) => setMembersText(e.target.value)} placeholder={"0x…\n0x…\n0x…"} />
           </label>
@@ -589,7 +730,7 @@ function LiveApp() {
               >
                 <span className="font-bold">Circle #{c.id}</span>
                 <span className="tnum text-muted">
-                  {fmtUSDC(c.contribution)} USDC · {c.completed ? "complete" : `round ${c.round + 1} of ${c.memberCount}`}
+                  {fmtUSDC(c.contribution)} USDC · {c.completed ? "complete" : c.cancelled ? "closed" : `round ${c.round + 1} of ${c.memberCount}`}
                 </span>
               </button>
             ))}
@@ -603,7 +744,7 @@ function LiveApp() {
               <div className="mb-5 flex flex-wrap items-center gap-5">
                 <Ring
                   count={detail.memberCount}
-                  active={detail.completed ? -1 : detail.round}
+                  active={detail.completed || detail.cancelled ? -1 : detail.round}
                   paidSet={new Set(detail.members.map((m, i) => (detail.paidMap[m] ? i : -1)).filter((i) => i >= 0))}
                   size={118}
                 />
@@ -615,8 +756,17 @@ function LiveApp() {
                   <p className="mt-1 text-muted">
                     {detail.completed
                       ? "Circle complete — everyone got their turn."
-                      : `Round ${detail.round + 1} of ${detail.memberCount} · ${shortAddr(detail.recipient)} collects`}
+                      : detail.cancelled
+                        ? `Circle closed — round ${detail.round + 1} stalled and was refunded.`
+                        : `Round ${detail.round + 1} of ${detail.memberCount} · ${shortAddr(detail.recipient)} collects`}
                   </p>
+                  {!detail.completed && !detail.cancelled && (
+                    <p className="mt-1 text-[13.5px] text-muted">
+                      {roundOverdue
+                        ? "This round is past its deadline. Members who paid can take their contribution back, or the rest can still pay in."
+                        : `Round deadline: ${fmtDeadline(detail.roundEnd)}`}
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="space-y-2.5">
@@ -625,16 +775,50 @@ function LiveApp() {
                     <span className="inline-flex items-center gap-2 font-bold">
                       {shortAddr(m)}
                       {account && m.toLowerCase() === account.toLowerCase() && <Badge variant="lime">you</Badge>}
-                      {!detail.completed && i === detail.round && <Badge variant="lime">collects this round</Badge>}
+                      {!detail.completed && !detail.cancelled && i === detail.round && <Badge variant="lime">collects this round</Badge>}
                     </span>
-                    <span className="ml-auto text-sm text-muted">{detail.completed ? "collected ✓" : detail.paidMap[m] ? "paid ✓" : "owing"}</span>
+                    <span className="ml-auto text-sm text-muted">
+                      {detail.completed ? "collected ✓" : detail.paidMap[m] ? "paid ✓" : detail.cancelled ? "—" : "owing"}
+                    </span>
                   </div>
                 ))}
               </div>
-              {!detail.completed && (
-                <Button variant="lime" className="mt-5" disabled={busy || !account || myTurnPaid} onClick={payIn}>
-                  {!account ? "Connect wallet to pay in" : myTurnPaid ? "You've paid this round" : `Pay in ${fmtUSDC(detail.contribution)} USDC`}
-                </Button>
+              <div className="mt-5 flex flex-wrap gap-3">
+                {!detail.completed && !detail.cancelled && (
+                  <Button variant="lime" disabled={busy || !account || myTurnPaid} onClick={payIn}>
+                    {!account ? "Connect wallet to pay in" : myTurnPaid ? "You've paid this round" : `Pay in ${fmtUSDC(detail.contribution)} USDC`}
+                  </Button>
+                )}
+                {canRefundNow && (
+                  <Button variant="outline" disabled={busy} onClick={refund}>
+                    Take my {fmtUSDC(detail.contribution)} USDC back
+                  </Button>
+                )}
+              </div>
+              {!detail.completed && !detail.cancelled && (
+                <div className="mt-6 rounded-xl border border-line bg-paper px-4 py-4">
+                  <p className="mb-3 inline-flex items-center gap-2 text-sm font-bold">
+                    <Share2 className="size-4" /> Invite your members
+                  </p>
+                  <p className="mb-3 text-[13.5px] text-muted">
+                    Send this link to your group. It opens this circle so each member can connect their wallet and pay in.
+                  </p>
+                  <div className="flex flex-wrap gap-2.5">
+                    <Button size="sm" variant="outline" onClick={copyInvite}>
+                      <Link2 /> {copied ? "Link copied" : "Copy invite link"}
+                    </Button>
+                    <Button size="sm" variant="outline" asChild>
+                      <a href={whatsappShare(detail.id, detail.contribution)} target="_blank" rel="noreferrer">
+                        <Send /> WhatsApp
+                      </a>
+                    </Button>
+                    <Button size="sm" variant="outline" asChild>
+                      <a href={telegramShare(detail.id, detail.contribution)} target="_blank" rel="noreferrer">
+                        <Send /> Telegram
+                      </a>
+                    </Button>
+                  </div>
+                </div>
               )}
             </>
           )}
@@ -643,6 +827,14 @@ function LiveApp() {
       {msg && (
         <Alert variant="warm" className="mt-6">
           {msg}
+          {lastTx && (
+            <>
+              {" "}
+              <a className="font-bold underline" href={`${NETWORK.explorer}/tx/${lastTx}`} target="_blank" rel="noreferrer">
+                View transaction on the explorer
+              </a>
+            </>
+          )}
         </Alert>
       )}
     </div>

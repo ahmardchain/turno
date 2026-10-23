@@ -52,11 +52,23 @@ contributors can understand the product end-to-end before any wallet or
 deployment exists — and the simulator doubles as a behavioural spec for the
 live UI.
 
-### 6. No backend, no accounts, no custody — anywhere
+### 6. Stalled rounds end in a refund, not a stuck pot
+Without a deadline, one member who stops paying would freeze everyone else's
+contributions in the contract forever. Each circle therefore has a round
+duration (1 hour to 90 days, set at creation). After a round's deadline, any
+member who already paid into it can call `refund` to take their own
+contribution back; the first refund closes the circle. Late contributions are
+still accepted until that happens, so an honest laggard can still finish the
+round. There is no admin override and no way to take anyone else's money — the
+refund path only ever returns a caller's own contribution to the current round.
+This limits a stall to the round it happens in, but it does not undo pots that
+already paid out; see the default-risk note in [CONTRACT.md](CONTRACT.md).
+
+### 7. No backend, no accounts, no custody — anywhere
 The app holds no keys and stores no user data. Wallets sign everything.
 Turno (the product) never touches funds at any layer: the contract holds pots
-briefly within a round, and only the round's scheduled member can receive
-them.
+briefly within a round, and money leaves only as the payout to the round's
+scheduled member or as a refund of a member's own contribution.
 
 ## Data flow (live mode)
 
@@ -64,7 +76,9 @@ them.
    `getCircle`, `getMembers`, `hasPaid`, `currentRecipient`, `potSize`.
 2. **Write path:** app → wallet (`BrowserProvider`, network auto-switched to
    Arc) → `createCircle`, or `approve` (only if allowance < contribution)
-   followed by `contribute`.
+   followed by `contribute`, or `refund` for a stalled round. Gas limits are
+   the node's estimate plus a 30% buffer, with a fixed fallback if estimation
+   fails.
 3. **Confirmation:** every write awaits its receipt; if the contribution
    completed a round, the UI says so and shows the transaction hash — the
    payout is in that same receipt's logs (`Payout` event).
@@ -96,3 +110,5 @@ Network parameters themselves (chain ids, RPCs, explorers) are constants in
 - **Fiat on-ramps** — members currently need USDC on Arc; post-grant.
 - **Reputation** — contribution history already exists on-chain; surfacing it
   as a portable record is post-grant.
+- **Collateral / deposits** — would protect later members from a member who
+  collects early and then defaults; post-grant.
