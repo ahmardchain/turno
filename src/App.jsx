@@ -40,6 +40,7 @@ import {
   USDC_ADDRESS,
   fmtDeadline,
   fmtUSDC,
+  friendlyError,
   gasOverrides,
   parseUSDC,
   readContract,
@@ -503,7 +504,7 @@ function LiveApp() {
       setAccount(await signer.getAddress());
       setMsg("");
     } catch (e) {
-      setMsg(e.shortMessage || e.message);
+      setMsg(friendlyError(e));
     }
   }
 
@@ -537,7 +538,7 @@ function LiveApp() {
       setCircleIdInUrl(id);
       setCopied(false);
     } catch (e) {
-      setMsg(e.shortMessage || e.message);
+      setMsg(friendlyError(e));
     } finally {
       setBusy(false);
     }
@@ -607,7 +608,7 @@ function LiveApp() {
       await loadCircles();
       if (created) await openCircle(Number(created.args.circleId));
     } catch (e) {
-      setMsg(e.shortMessage || e.message);
+      setMsg(friendlyError(e));
     } finally {
       busyRef.current = false;
       setBusy(false);
@@ -643,7 +644,7 @@ function LiveApp() {
       await openCircle(detail.id);
       await loadCircles();
     } catch (e) {
-      setMsg(e.shortMessage || e.message);
+      setMsg(friendlyError(e));
     } finally {
       busyRef.current = false;
       setBusy(false);
@@ -667,7 +668,7 @@ function LiveApp() {
       await openCircle(detail.id);
       await loadCircles();
     } catch (e) {
-      setMsg(e.shortMessage || e.message);
+      setMsg(friendlyError(e));
     } finally {
       busyRef.current = false;
       setBusy(false);

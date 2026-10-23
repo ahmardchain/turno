@@ -47,11 +47,24 @@ export const TURNO_ABI = [
   "function currentRecipient(uint256 circleId) view returns (address)",
   "function potSize(uint256 circleId) view returns (uint256)",
   "event CircleCreated(uint256 indexed circleId, address indexed creator, uint256 contribution, uint256 memberCount, uint256 roundDuration)",
-  "event Contribution(uint256 indexed circleId, uint256 indexed round, address indexed member, uint256 amount)",
-  "event Payout(uint256 indexed circleId, uint256 indexed round, address indexed recipient, uint256 amount)",
+  "event Contribution(uint256 indexed circleId, address indexed member, uint256 amount, uint256 round)",
+  "event Payout(uint256 indexed circleId, address indexed recipient, uint256 amount, uint256 round)",
   "event CircleCompleted(uint256 indexed circleId)",
-  "event CircleCancelled(uint256 indexed circleId, uint256 indexed round)",
-  "event Refund(uint256 indexed circleId, uint256 indexed round, address indexed member, uint256 amount)",
+  "event CircleCancelled(uint256 indexed circleId)",
+  "event Refund(uint256 indexed circleId, address indexed member, uint256 amount, uint256 round)",
+  "error ZeroAddress()",
+  "error InvalidMemberCount(uint256 provided)",
+  "error DuplicateMember(address member)",
+  "error InvalidContribution()",
+  "error InvalidRoundDuration(uint256 provided)",
+  "error CircleNotFound(uint256 circleId)",
+  "error CircleIsCompleted()",
+  "error CircleIsCancelled()",
+  "error NotMember(address account)",
+  "error AlreadyPaid(uint256 circleId, uint256 round, address member)",
+  "error ContributionNotFound(uint256 circleId, uint256 round, address member)",
+  "error RefundNotAvailable(uint256 circleId)",
+  "error ERC20TransferFailed()",
 ];
 
 export const USDC_ABI = [
@@ -93,6 +106,31 @@ export async function gasOverrides(contractMethod, ...args) {
   } catch {
     return { gasLimit: FALLBACK_GAS };
   }
+}
+
+// Plain-language messages for the contract's custom errors.
+const ERROR_MESSAGES = {
+  ZeroAddress: "One of the member addresses is empty (0x000…).",
+  InvalidMemberCount: "A circle needs 2 to 10 members.",
+  DuplicateMember: "Each member can only appear once.",
+  InvalidContribution: "The contribution must be more than zero.",
+  InvalidRoundDuration: "Round length must be between 1 hour and 90 days.",
+  CircleNotFound: "That circle doesn't exist.",
+  CircleIsCompleted: "This circle is already complete.",
+  CircleIsCancelled: "This circle was closed after a stalled round.",
+  NotMember: "Your connected wallet isn't a member of this circle.",
+  AlreadyPaid: "You've already paid in this round.",
+  ContributionNotFound: "You haven't paid into this round, so there's nothing to refund.",
+  RefundNotAvailable: "Refunds open only after the round's deadline passes.",
+  ERC20TransferFailed: "The USDC transfer failed. Check your balance and approval.",
+};
+
+export function friendlyError(e) {
+  if (e?.code === "ACTION_REJECTED") return "You cancelled the request in your wallet.";
+  const name = e?.revert?.name;
+  if (name && ERROR_MESSAGES[name]) return ERROR_MESSAGES[name];
+  if (e?.code === "INSUFFICIENT_FUNDS") return "Not enough USDC in this wallet to pay for gas.";
+  return e?.shortMessage || e?.message || "Something went wrong.";
 }
 
 export function fmtDeadline(unixSeconds) {
