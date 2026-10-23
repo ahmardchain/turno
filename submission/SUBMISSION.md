@@ -7,12 +7,14 @@ demo is live, do not wait for the deadline.
 
 ## Short description (form field)
 
-Turno is a savings circle — ajo, esusu, susu, tontine — where the smart contract
-holds the pot. Groups of 2–10 set a fixed USDC contribution on Arc. Each round,
-every member pays in; the moment the last contribution lands, the full pot pays
-that round's member automatically, in the same transaction. No organiser holds
-the money, no admin can delay or redirect a payout, and the rotation fixed at
-creation is visible to everyone. Built end-to-end in Arc Studio.
+Turno is a savings circle where the smart contract holds the pot. Groups of 2–10
+set a fixed USDC contribution and a round length on Arc. Each round, every
+member pays in; the moment the last contribution lands, the full pot pays that
+round's member automatically, in the same transaction. No organiser holds the
+money, no admin can delay or redirect a payout, and the rotation fixed at
+creation is visible to everyone. If a round stalls past its deadline, members
+who already paid can take their own contribution back. Built end-to-end in Arc
+Studio. [Keep that last sentence only if it is true when you submit.]
 
 ## Long description
 
@@ -24,11 +26,17 @@ plainly: "tracking only — no wallet, no escrow"), or they hold funds as a
 licensed local custodian in one currency and one country.
 
 Turno removes the trusted holder entirely. Contributions go to a contract on Arc
-with no owner, no admin, no fee and no withdrawal function. The only code path
-that moves money out is the payout, and it fires automatically as part of the
-final contribution of each round. A circle in Lagos and a diaspora member in
-London settle in USDC, in the same circle, with sub-second finality — and every
-contribution and payout is verifiable on the Arc explorer.
+with no owner, no admin and no fee. Money leaves in exactly two ways: the payout,
+which fires automatically as part of the final contribution of each round, or a
+refund of a member's own contribution if a round stalls past its deadline. A
+circle in Lagos and a diaspora member in London settle in USDC, in the same
+circle, with sub-second finality — and every contribution, payout and refund is
+verifiable on the Arc explorer.
+
+Limit, stated plainly: a refund returns only the stalled round's contributions.
+A member who collects early and then stops paying can still leave later members
+behind, so circles are for people who trust each other; collateral is the next
+thing to build.
 
 From here: recurring/cross-circle reputation from on-time contributions,
 larger circles with sub-groups, and fiat on-ramps so a member can pay in from
@@ -38,7 +46,8 @@ a bank account while the circle still settles in USDC on Arc.
 
 [FILL FROM THE REAL BUILD — prompts are in `studio/STUDIO_PROMPTS.md`]
 The Turno contract was described, generated and tested in Arc Studio (test cases:
-full-cycle payout, double-contribution and non-member reverts, completion), put
+full-cycle payout, double-contribution and non-member reverts, completion,
+stalled-round refunds, late contributions), put
 through a Studio review pass, deployed to Arc testnet for a rehearsal circle,
 and the app was built in Studio around the deployed contract. The same project
 was then deployed to Arc mainnet and a live demo circle was run with real USDC.
@@ -60,16 +69,17 @@ was then deployed to Arc mainnet and a live demo circle was run with real USDC.
 - **Arc Studio across the build (25%)** — contract, tests, review, testnet
   rehearsal and app all in one Studio project; video shows it.
 - **Working product (25%)** — create circle → pay in → automatic payout →
-  completion, all live in the app.
+  completion, plus refunds for stalled rounds, all live in the app.
 - **Potential to go further (20%)** — savings circles are a global, centuries-old
-  practice with named forms on every continent (ajo, esusu, susu, tontine, hui,
-  chama, kye…); Turno is the version where no one has to be trusted with the pot.
+  practice with named forms on every continent (susu, tontine, hui, chama,
+  kye…); Turno is the version where no one has to be trusted with the pot.
+  Next: collateral so a default can't leave later members behind.
 
 ## Demo video script (~2.5 min)
 
 1. **0:00 — The problem (screen: a WhatsApp group chat).** "This is how millions
-   of people save: an ajo circle. Everyone pays in, one person collects. And one
-   person holds the money. That's the problem Turno removes."
+   of people save: a savings circle. Everyone pays in, one person collects. And
+   one person holds the money. That's the problem Turno removes."
 2. **0:25 — The build (screen: Arc Studio).** Show the Studio project: the
    contract prompt, the generated Turno contract, the passing tests.
 3. **0:50 — Create (screen: app).** "Three members, 2 USDC each. Payout order is
@@ -78,7 +88,8 @@ was then deployed to Arc mainnet and a live demo circle was run with real USDC.
    contribution: "Watch — nobody presses 'pay out'. The contract pays member one
    the full 6 USDC pot inside that same transaction." Cut to the explorer tx.
 5. **1:55 — Finish + the guarantee.** Fast-forward rounds 2–3, circle complete.
-   "No owner. No admin. No withdrawal button. The only way money ever leaves
-   Turno is to the member whose turn it is."
+   "No owner. No admin. The only ways money leaves Turno are the payout to the
+   member whose turn it is, or a refund of your own contribution if a round
+   stalls."
 6. **2:20 — Close.** "Turno. Everyone gets their turn. Built in Arc Studio,
    live on Arc mainnet."
